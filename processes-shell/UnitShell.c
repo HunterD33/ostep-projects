@@ -1,38 +1,29 @@
 /**
- * @file module.h
- * @brief Brief description of what this module does.
- * @author Your Name
- * @date 2026-10-07
+ * @file main.c
+ * @brief Application entry point.
  */
 
-#ifndef MODULE_H
-#define MODULE_H
+#include <stdio.h>
+#include "module.h"
 
-/* --- Standard Library Includes --- */
-#include <stdint.h>
+int main(int argc, char *argv[]) {
+    // Suppress unused parameter warnings if not used immediately
+    (void)argc;
+    (void)argv;
 
-/* --- Macro Definitions / Constants --- */
-#define MAX_BUFFER_SIZE 1024
+    printf("Starting application...\n");
 
-/* --- Custom Type Definitions (Enums, Structs) --- */
-typedef struct {
-    int32_t id;
-    float value;
-} ModuleConfig_t;
+    ModuleConfig_t config = {
+        .id = 101,
+        .value = 4.2f
+    };
 
-/* --- Public Function Prototypes (API) --- */
+    if (Module_Init(&config) != 0) {
+        fprintf(stderr, "Failed to initialize module.\n");
+        return 1;
+    }
 
-/**
- * @brief Initializes the module with the specified configuration.
- * @param config Pointer to the configuration structure.
- * @return 0 on success, non-zero error code on failure.
- */
-int32_t Module_Init(const ModuleConfig_t *config);
+    Module_Process();
 
-/**
- * @brief Processes the module data.
- * @return Current status code.
- */
-int32_t Module_Process(void);
-
-#endif /* MODULE_H */
+    return 0;
+}
