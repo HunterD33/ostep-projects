@@ -19,9 +19,25 @@ void printBanner() {
     printf("**********************************************\n\n");
 }
 
-// main loop that execpts argurment
-int main(int argc, char *argv[]) {
+// Printing directory before input is taken, if its too long then exit
+void printDirectory(){
+    char dir[1024];    // max length is 1024
 
+    if(getcwd(dir, sizeof(dir)) != NULL){
+        printf("/nDir: %s", dir);    // printing directory
+    }else{
+        printf("/ngetcwd failed");    // telling you that dir is null or size is too long
+        return;        // exiting function saftly
+    }
+}
+
+
+// main loop that execpts argurment
+int main(]) {
+    // defining inputs and their max length
+    char input[MAX_INPUT];
+    char *args1[MAX_ARGS], *args2[MAX_ARGS];
+    
     printBanner();    // Printing banner to separate thingy
 
     // never ending while for shell to keep going unless you type EXIT
