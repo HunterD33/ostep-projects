@@ -4,8 +4,30 @@
 
 // main code
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
+#define MAX_INPUT 1024   // Max length of user input
+#define MAX_ARGS 64      // Max number of arguments
+
+// Function to print banner
+void printBanner() {
+    printf("\n**********************************************\n");
+    printf("           ********** My Shell ************\n");
+    printf("**********************************************\n\n");
+}
+
+// main loop that execpts argurment
 int main(int argc, char *argv[]) {
+
+    printBanner();    // Printing banner to separate thingy
+
+    // never ending while for shell to keep going unless you type EXIT
+    while(1){
+        
+    }
     
 }
 
