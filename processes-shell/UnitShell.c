@@ -12,11 +12,9 @@
 #define MAX_INPUT 1024   // Max length of user input
 #define MAX_ARGS 64      // Max number of arguments
 
-// Function to print banner
+// Function to print banner to separate my shell from the stuff before
 void printBanner() {
-    printf("\n**********************************************\n");
-    printf("           ********** My Shell ************\n");
-    printf("**********************************************\n\n");
+    printf("\n\n******************* My Shell ******************\n\n");
 }
 
 // Printing directory before input is taken, if its too long then exit
@@ -24,12 +22,31 @@ void printDirectory(){
     char dir[1024];    // max length is 1024
 
     if(getcwd(dir, sizeof(dir)) != NULL){
-        printf("/nDir: %s", dir);    // printing directory
+        printf("\nDir: %s", dir);    // printing directory
     }else{
-        printf("/ngetcwd failed");    // telling you that dir is null or size is too long
+        printf("\ngetcwd failed");    // telling you that dir is null or size is too long
         return;        // exiting function saftly
     }
 }
+
+// Function to take input from the user
+void takeInput(char *input) {
+    printf("\n>>> ");  // Prompt
+
+    // fgets = file get string
+    if (fgets(input, MAX_INPUT, stdin) == NULL) {
+        // If input fails exit shell
+        printf("\nExiting...\n");
+        exit(0);
+    }
+    
+    // Remove trailing newline character
+    input[strcspn(input, "\n")] = 0;
+    // measures the length of the initial segment of a string that 
+    //     does not contain any characters from a specified rejection set 
+}
+
+
 
 
 // main loop that execpts argurment
@@ -39,9 +56,13 @@ int main(]) {
     char *args1[MAX_ARGS], *args2[MAX_ARGS];
     
     printBanner();    // Printing banner to separate thingy
-
+    
     // never ending while for shell to keep going unless you type EXIT
     while(1){
+        printDirectory();    // printing directory before input
+        takeInput(input);    // taking user input
+
+                
         
     }
     
