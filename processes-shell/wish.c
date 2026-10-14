@@ -83,12 +83,30 @@ int handleBuiltIn(char **args) {
         return 1;
     }
 
+    // add path command
+    if (strcmp(args[0], "path") == 0){
+        // for loop cause it takes 0 or more arguments
+        for(int i = 0; i < sizeof(args[]); i++){
+            // Get the existing PATH
+            char *old_path = getenv("path");
+    
+            // Create a new buffer to hold the combined path
+            char new_path[2048];
+            snprintf(new_path, sizeof(new_path), "%s : new path", old_path);
+    
+            // Update the environment (1 overwrites the existing variable)
+            if (setenv("path", new_path, 1) == 0) {    // sets new path
+                printf("\npath updated successfully!\n");
+            }
+        }
+        
+        return 1;   
+    }
+
     // Help command
     if (strcmp(args[0], "help") == 0) {
-        printf("\nSimple Shell Help\n");
-        printf("Built-in commands:\n");
-        printf("  cd <dir>\n  exit\n  help\n");
-        printf("Supports pipes: ls | grep txt\n");    // '|' is pipe
+        printf("\nSimple Shell Help\nBuilt-in commands: cd <dir>, exit, path, help\nSupports pipes: ls, |, grep, txt\n");
+        // '|' is pipe
         return 1;
     }
 
