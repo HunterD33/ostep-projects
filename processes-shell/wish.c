@@ -84,24 +84,25 @@ int handleBuiltIn(char **args) {
     }
 
     // add path command
-    if (strcmp(args[0], "path") == 0){
-        // for loop cause it takes 0 or more arguments
-        for(int i = 0; i < sizeof(args[]); i++){
-            // Get the existing PATH
-            char *old_path = getenv("path");
-    
-            // Create a new buffer to hold the combined path
-            char new_path[2048];
-            snprintf(new_path, sizeof(new_path), "%s : new path", old_path);
-    
-            // Update the environment (1 overwrites the existing variable)
-            if (setenv("path", new_path, 1) == 0) {    // sets new path
-                printf("\npath updated successfully!\n");
-            }
+    if (strcmp(args[0], "path") == 0) {
+    for (int i = 1; args[i] != NULL; i++) {
+        char *old_path = getenv("PATH");
+        char new_path[2048];
+
+        if (old_path != NULL) {
+            snprintf(new_path, sizeof(new_path), "%s:%s", old_path, args[i]);
+        } else {
+            snprintf(new_path, sizeof(new_path), "%s", args[i]);
         }
-        
-        return 1;   
+
+        if (setenv("PATH", new_path, 1) == 0) {
+            printf("\nPath updated: added %s\n", args[i]);
+        } else {
+            perror("setenv failed");
+        }
     }
+    return 1;
+}
 
     // Help command
     if (strcmp(args[0], "help") == 0) {
@@ -192,7 +193,7 @@ int parsePipe(char *input, char **left, char **right) {
 }
 
 // main loop that execpts argurment
-int main(]) {
+int main() {
     // defining inputs and their max length
     char input[MAX_INPUT];
     char *args1[MAX_ARGS], *args2[MAX_ARGS];
@@ -218,7 +219,8 @@ int main(]) {
             parseInput(input, args1); // Parse normal command
 
             // Handle built-in commands first
-            if (handleBuiltIn(args1)) continue;
+            if (handleBuiltIn(args1)) 
+                continue;
 
             executeCommand(args1); // Execute external command
         }
@@ -226,13 +228,4 @@ int main(]) {
 
     return 0;  
     }
-}
 
-/*
-Examples and Practices not for a grade 
-Copy the example files into a working folder and compile every program with warnings on:
-mkdir -p ~/lab5 && cd ~/lab5
-gcc -Wall -Wextra -g ex1.c -o ex1
-./ex1
--Wall -Wextra //makes the compiler report many of the bugs in this lab. Read every warning before you run the program.
-*/
