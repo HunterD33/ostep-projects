@@ -14,7 +14,7 @@
 
 // Function to print banner to separate my shell from the stuff before
 void printBanner() {
-    printf("\n\n******************* My Shell ******************\n\n");
+    printf("\n\n******************* Wish Shell ******************\n\n");
 }
 
 // Printing directory before input is taken, if its too long then exit
