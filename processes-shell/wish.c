@@ -1,231 +1,316 @@
-// copy code into file in linux then run in terminal also look on blackboard week 6 to look at examples and practices
-// coding in c 
-// so when done coding copy it to here to save and share
+/*
+ * wish.c - the Wisconsin Shell (skeleton)
+ *
+ * Your job: fill in every TODO below to build a simple Unix shell.
+ * Read the project README carefully before you start:
+ *   https://github.com/remzi-arpacidusseau/ostep-projects/tree/master/processes-shell
+ *
+ * Compile:   gcc -Wall -Werror -o wish wish.c
+ * Run:       ./wish              (interactive mode)
+ *            ./wish batch.txt    (batch mode)
+ *
+ * This skeleton already compiles and runs. Much of the plumbing is done
+ * for you: reading input, splitting lines into words, the fork/child/parent
+ * structure, and waiting for children. Your work is in the TODOs:
+ *   1. Batch mode: open the batch file and handle bad arguments (main).
+ *   2. Finding programs in the search path (run_command).
+ *   3. The built-ins: exit, cd, path (run_command).
+ *   4. Redirection (>): parsing the filename and dup2 in the child.
+ *   5. All the error cases. Test after every step!
+ *
+ * Right now the shell can read lines but cannot run anything, because
+ * the path search (TODO 2) always fails. Start there.
+ *
+ * Useful man pages: getline, strsep, strchr, strcmp, strdup, access,
+ *                   fork, execv, waitpid, chdir, open, dup2
+ */
 
-// main code
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 
-#define MAX_INPUT 1024   // Max length of user input
-#define MAX_ARGS 64      // Max number of arguments
+#define MAX_ARGS 100    // most words allowed in one command
+#define MAX_PATHS 100   // most directories allowed in the search path
+#define MAX_CMDS 100    // most parallel commands allowed on one line
 
-// Function to print banner to separate my shell from the stuff before
-void printBanner() {
-    printf("\n\n******************* Wish Shell ******************\n\n");
+// The shell's search path: a list of directories to look in for programs.
+// Example: after "path /bin /usr/bin", paths = {"/bin", "/usr/bin"}, npaths = 2
+char *paths[MAX_PATHS];
+int npaths = 0;
+
+/*
+ * print_error: the ONLY error message the shell ever prints.
+ * Call it whenever anything goes wrong. It writes to stderr, not stdout.
+ */
+void print_error() {
+    char error_message[30] = "An error has occurred\n";
+    write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
-// Printing directory before input is taken, if its too long then exit
-void printDirectory(){
-    char dir[1024];    // max length is 1024
+/*
+ * run_command: runs ONE command (main has already split the line on '&').
+ *
+ * Example inputs:  "ls -la /tmp\n"   "echo hi > out.txt"   "   "
+ *
+ * Returns the child's pid if it started a new process,
+ * otherwise returns 0 (built-in, empty command, or an error).
+ */
+pid_t run_command(char *cmd) {
+    char *outfile = NULL;   // name of the redirect file, or NULL if no '>'
 
-    if(getcwd(dir, sizeof(dir)) != NULL){
-        printf("\nDir: %s", dir);    // printing directory
-    }else{
-        printf("\ngetcwd failed");    // telling you that dir is null or size is too long
-        return;        // exiting function saftly
+    /* ================= Redirection (>) ================= */
+    char *redir = strchr(cmd, '>');   // pointer to the first '>', or NULL
+    if (redir != NULL) {
+        *redir = '\0';             // cut the string: cmd is now just the part before '>'
+        char *rest = redir + 1;    // rest is the part after '>'
+
+        /* TODO 4a: If rest contains another '>' (e.g. "ls > a > b"),
+         *          call print_error() and return 0.
+         */ //DONE
+
+	if (strchr(rest, '>') != NULL){
+	    print_error();
+	    return 0;
+	}
+
+        // Go through the words after '>'. There must be exactly one.
+        char *tok;
+        int nfiles = 0;
+        while ((tok = strsep(&rest, " \t\n")) != NULL) {
+            if (*tok == '\0') continue;   // skip empty pieces from repeated spaces
+            nfiles++;
+            /* TODO 4b: If this is the first word (nfiles == 1),
+             *          save it in outfile.
+             */
+
+	    if (nfiles == 1){
+		outfile = tok;
+		
+	    }
+
+        }
+
+        /* TODO 4c: If nfiles is not exactly 1 ("ls >" or "ls > a b"),
+         *          call print_error() and return 0.
+         */	//DONE
+	if (nfiles != 1){
+	    print_error();
+	    return 0;
+	}
     }
-}
 
-// Function to take input from the user
-void takeInput(char *input) {
-    printf("\n>>> ");  // Prompt
-
-    // fgets = file get string
-    if (fgets(input, MAX_INPUT, stdin) == NULL) {
-        // If input fails exit shell
-        printf("\nExiting...\n");
-        exit(0);
+    /* ================= Split into words ================= */
+    // After this loop, args = {"ls", "-la", "/tmp", NULL} and argc = 3.
+    char *args[MAX_ARGS];
+    int argc = 0;
+    char *word;
+    while ((word = strsep(&cmd, " \t\n")) != NULL) {
+        if (*word == '\0') continue;               // skip empty pieces
+        if (argc < MAX_ARGS - 1) args[argc++] = word;
     }
-    
-    // Remove trailing newline character
-    input[strcspn(input, "\n")] = 0;
-    // measures the length of the initial segment of a string that 
-    //     does not contain any characters from a specified rejection set 
-}
+    args[argc] = NULL;   // execv needs the list to end with NULL
 
-// Function to split input into command + arguments
-void parseInput(char *input, char **args) {
-    int i = 0;
-
-    // Tokenize input based on space
-    args[i] = strtok(input, " ");    // it is used to split a larger string into smaller pieces called "tokens"
-
-    // Continue splitting until NULL or max args reached
-    while (args[i] != NULL && i < MAX_ARGS - 1) {
-        i++;
-        args[i] = strtok(NULL, " ");
+    // Blank command: nothing to do. But "> file" with no command is an error.
+    if (argc == 0) {
+        if (outfile != NULL) print_error();
+        return 0;
     }
-}
 
-// Function to handle built-in shell commands
-int handleBuiltIn(char **args) {
-    if (args[0] == NULL) return 1;  // Empty command
-
-    // Exit command
+    /* ================= Built-in commands =================
+     * Built-ins run inside the shell itself. Do NOT fork for them.
+     */
     if (strcmp(args[0], "exit") == 0) {
-        printf("Exiting shell...\n");
-        exit(0);
+        /* TODO 3a: exit
+         *   - With no arguments (argc == 1): exit(0).
+         *   - With any arguments: print_error(), and keep running.
+         */	//DONE
+	if (argc == 1){
+	    exit(0);	
+	}
+	print_error();
+        return 0;
     }
 
-    // Change directory command
     if (strcmp(args[0], "cd") == 0) {
-        if (args[1] == NULL) {
-            printf("Expected argument to \"cd\"\n");
-        } else {
-            // Change directory and handle error
-            if (chdir(args[1]) != 0) {
-                perror("cd failed");
-            }
-        }
-        return 1;
+        /* TODO 3b: cd
+         *   - Must have exactly one argument (argc == 2), else print_error().
+         *   - Call chdir(args[1]). It returns non-zero on failure:
+         *     then print_error().
+         */	//DONE
+	if (argc == 2){
+	    if (chdir(args[1]) != 0){
+		print_error();
+	    }
+	} else{ 
+	    print_error();
+	}
+        return 0;
     }
 
-    // add path command
     if (strcmp(args[0], "path") == 0) {
-    for (int i = 1; args[i] != NULL; i++) {
-        char *old_path = getenv("PATH");
-        char new_path[2048];
+        /* TODO 3c: path
+         *   - First free() every old entry in paths[] and set npaths = 0.
+         *   - Then copy each argument (args[1] .. args[argc-1]) into paths[]
+         *     with strdup(). (The words in args point into the line buffer,
+         *     which gets overwritten by the next line, so you must copy.)
+         *   - "path" with no arguments leaves the path empty, after which
+         *     only built-ins can run.
+         */	//DONE
 
-        if (old_path != NULL) {
-            snprintf(new_path, sizeof(new_path), "%s:%s", old_path, args[i]);
-        } else {
-            snprintf(new_path, sizeof(new_path), "%s", args[i]);
+	for (int i = 0; i < npaths; i++) {
+            free(paths[i]);
+        }
+        npaths = 0;
+ 
+        // copy each new directory (strdup, since args points into the line buffer)
+        for (int i = 1; i < argc && npaths < MAX_PATHS; i++) {
+            paths[npaths] = strdup(args[i]);
+            if (paths[npaths] == NULL) {
+                print_error();
+                break;
+            }
+            npaths++;
         }
 
-        if (setenv("PATH", new_path, 1) == 0) {
-            printf("\nPath updated: added %s\n", args[i]);
-        } else {
-            perror("setenv failed");
-        }
-    }
-    return 1;
-}
-
-    // Help command
-    if (strcmp(args[0], "help") == 0) {
-        printf("\nSimple Shell Help\nBuilt-in commands: cd <dir>, exit, path, help\nSupports pipes: ls, |, grep, txt\n");
-        // '|' is pipe
-        return 1;
+        return 0;
     }
 
-    return 0; // Not a built-in command
-}
+    /* ================= Find the program ================= */
+    char fullpath[512];
+    int found = 0;
+    for (int i = 0; i < npaths; i++) {
+        // Build "<dir>/<program>", e.g. "/bin" + "ls" -> "/bin/ls"
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", paths[i], args[0]);
 
-// Function to execute a normal (non-piped) command
-void executeCommand(char **args) {
-    pid_t pid = fork();  // Create a child process
+        /* TODO 2: Check whether fullpath exists and is executable with
+         *         access(fullpath, X_OK). It returns 0 if it is.
+         *         If so, set found = 1 and break out of the loop.
+         */	//DONE
+
+	if (access(fullpath, X_OK) == 0){ 
+	    found = 1;
+	    break;
+	}
+
+    }
+    if (!found) {
+        print_error();   // not in any directory of the path
+        return 0;
+    }
+
+    /* ================= Fork and run ================= */
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        // fork failed
+        print_error();
+        return 0;
+    }
 
     if (pid == 0) {
-        // Child process executes command
-        if (execvp(args[0], args) < 0) {
-            perror("Command failed"); // If execution fails prints a descriptive error message
+        // ---------- CHILD process ----------
+        if (outfile != NULL) {
+            /* TODO 4d: Send the child's output to outfile.
+             *   - int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+             *   - If fd < 0: print_error() and exit(1).
+             *   - dup2(fd, STDOUT_FILENO);   // stdout now goes to the file
+             *   - dup2(fd, STDERR_FILENO);   // stderr too
+             *   - close(fd);                 // the original fd is no longer needed
+             */		//DONE
+
+	    int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) {
+                print_error();
+                exit(1);
+            }
+
+            if (dup2(fd, STDOUT_FILENO) < 0 || dup2(fd, STDERR_FILENO) < 0) {
+                print_error();
+                exit(1);
+            }
+
+            close(fd);   // the original fd is no longer needed
+
         }
-        exit(1);
-    } else {
-        // Parent process waits for child to finish
-        wait(NULL);
-    }
-}
 
-// Function to execute two commands connected by a pipe
-void executePiped(char **args1, char **args2) {
-    int pipefd[2];
-    pipe(pipefd);  // Create pipe '|' this is its symbol
-    // It takes an array of two integers and fills them with file descriptors
-    // pipefd[0]: The read end of the pipe (used to read data out).
-    // pipefd[1]: The write end of the pipe (used to write data in)
+        execv(fullpath, args);   // replaces the child with the program
 
-    pid_t p1 = fork();
-
-    if (p1 == 0) {
-        // First child process (left command)
-        dup2(pipefd[1], STDOUT_FILENO); // Redirect stdout to pipe write end
-        close(pipefd[0]); // Close unused read end
-        close(pipefd[1]);
-
-        execvp(args1[0], args1); // Execute first command
-        perror("Pipe cmd1 failed");
+        // execv only returns if it failed.
+        // The child MUST exit here, or you will have two shells running!
+        print_error();
         exit(1);
     }
 
-    pid_t p2 = fork();
+    // ---------- PARENT process ----------
+    // Don't wait here. Return the pid so main() can start every
+    // parallel command before waiting on any of them.
+    return pid;
+}
 
-    if (p2 == 0) {
-        // Second child process (right command)
-        dup2(pipefd[0], STDIN_FILENO); // Redirect stdin to pipe read end
-        close(pipefd[1]); // Close unused write end
-        close(pipefd[0]);
+int main(int argc, char *argv[]) {
+    FILE *input = stdin;   // where commands come from
+    int interactive = 1;   // 1 = print a prompt, 0 = batch mode
 
-        execvp(args2[0], args2); // Execute second command
-        perror("Pipe cmd2 failed");
-        exit(1);
+    /* ================= Command-line arguments ================= */
+    if (argc > 2) {
+        /* TODO 1a: More than one argument is an error:
+         *          print_error() and exit(1).
+         */
+	print_error();
+	exit(1);
     }
-
-    // Parent process closes both ends of pipe
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    // Wait for both child processes to complete
-    wait(NULL);
-    wait(NULL);
-}
-
-// Function to detect and split input around a pipe '|'
-int parsePipe(char *input, char **left, char **right) {
-    char *pipePos = strchr(input, '|'); // Find pipe symbol
-    // strchr finds the first occurance of a character insided a null-termination string
-
-    if (!pipePos) return 0; // No pipe found
-
-    *pipePos = '\0'; // Split string at pipe
-    pipePos++;       // Move to right side
-
-    // Skip leading spaces in right command
-    while (*pipePos == ' ') pipePos++;
-
-    *left = input;    // Left command
-    *right = pipePos; // Right command
-
-    return 1; // Pipe exists
-}
-
-// main loop that execpts argurment
-int main() {
-    // defining inputs and their max length
-    char input[MAX_INPUT];
-    char *args1[MAX_ARGS], *args2[MAX_ARGS];
-    
-    printBanner();    // Printing banner to separate thingy
-    
-    // never ending while for shell to keep going unless you type EXIT
-    while(1){
-        printDirectory();    // printing directory before input
-        takeInput(input);    // taking user input
-
-        if (strlen(input) == 0) continue; // Ignore empty input
-
-        char *left, *right;
-
-        // Check if input contains a pipe
-        if (parsePipe(input, &left, &right)) {
-            parseInput(left, args1);   // Parse left command
-            parseInput(right, args2);  // Parse right command
-
-            executePiped(args1, args2); // Execute piped commands
-        } else {
-            parseInput(input, args1); // Parse normal command
-
-            // Handle built-in commands first
-            if (handleBuiltIn(args1)) 
-                continue;
-
-            executeCommand(args1); // Execute external command
+    if (argc == 2) {
+        /* TODO 1b: Batch mode.
+         *   - input = fopen(argv[1], "r");
+         *   - If input is NULL (can't open the file): print_error() and exit(1).
+         *   - Set interactive = 0 so no prompt is printed.
+         */
+	input = fopen(argv[1], "r");
+        if (input == NULL) {
+            print_error();
+            exit(1);
         }
+        interactive = 0;   // no prompt in batch mode
     }
 
-    return 0;  
+    // The search path starts out as just "/bin".
+    // strdup so every entry can be freed the same way in "path".
+    paths[npaths++] = strdup("/bin");
+
+    /* ================= Main loop ================= */
+    char *line = NULL;   // getline allocates (and grows) this buffer for us
+    size_t len = 0;
+
+    while (1) {
+        if (interactive) {
+            printf("wish> ");
+            fflush(stdout);   // make the prompt appear right away
+        }
+
+        // Read one line. getline returns -1 at end of file (or Ctrl-D).
+        if (getline(&line, &len, input) == -1) break;
+
+        // Split the line on '&'. Each piece is one command; we start
+        // them all first and wait afterwards, so they run in parallel.
+        // A line with no '&' is just a single piece.
+        pid_t pids[MAX_CMDS];
+        int npids = 0;
+        char *rest = line;
+        char *cmd;
+        while ((cmd = strsep(&rest, "&")) != NULL) {
+            pid_t pid = run_command(cmd);
+            if (pid > 0 && npids < MAX_CMDS) pids[npids++] = pid;
+        }
+
+        // Now wait for every child we started.
+        for (int i = 0; i < npids; i++)
+            waitpid(pids[i], NULL, 0);
     }
 
+    free(line);
+    if (input != stdin) fclose(input);
+    exit(0);   // reaching end of input is a normal exit
+}
